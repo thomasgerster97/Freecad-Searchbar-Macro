@@ -4,19 +4,30 @@ Command Search Bar for FreeCAD
 Author: Thomas Gerster
 
 Description:
-This script creates a custom search bar in FreeCAD to quickly find and execute commands.
-The search bar is designed to appear at the current mouse position and allows filtering commands
+This script creates a custom search bar in FreeCAD for quick command search and execution.
+The search bar appears at the current mouse position and allows users to filter commands
 by their display names. Commands can be executed with a single click or by pressing Enter.
 
 Features:
-- Displays a list of commands based on the input.
+- Displays a list of commands based on user input.
 - Supports navigation with arrow keys.
-- Closes with Escape key or focus loss.
-- Executes selected command with a single click.
+- Closes with the Escape key or when focus is lost.
+- Executes the selected command with a single click.
 
 Dependencies:
 - FreeCADGui
 - PySide (Qt library)
+
+Usage:
+1. Run the script to open the search bar.
+2. Type to filter commands by their display names.
+3. Use arrow keys to navigate through the list.
+4. Press Enter to execute the selected command.
+5. Click on a command to execute it or press Escape to close the search bar.
+
+Notes:
+- The search bar appears at the mouse cursor position.
+- Commands are executed directly through FreeCAD's command interface.
 """
 
 import FreeCADGui as Gui
@@ -25,7 +36,7 @@ from PySide import QtGui, QtCore
 class CommandSearchBar(QtGui.QWidget):
     def __init__(self):
         super(CommandSearchBar, self).__init__()
-        
+
         # Fenster ohne Rahmen und transparenten Hintergrund
         self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint)
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
@@ -33,69 +44,94 @@ class CommandSearchBar(QtGui.QWidget):
         self.setMinimumWidth(400)
 
         # Layout und Eingabefeld
-        layout = QtGui.QVBoxLayout(self)
-        self.search_field = QtGui.QLineEdit(placeholderText="Search for a command...")
+        self.search_field = QtGui.QLineEdit(self)
+        self.search_field.setPlaceholderText("Search for a command...")
         self.search_field.textChanged.connect(self.update_list)
-        layout.addWidget(self.search_field)
 
         # Suchergebnisliste
-        self.result_list = QtGui.QListWidget()
-        self.result_list.itemClicked.connect(self.run_command)
-        layout.addWidget(self.result_list)
+        self.result_list = QtGui.QListWidget(self)
+        self.result_list.itemClicked.connect(self.execute_command)
 
-        # Alle Befehle laden und anzeigen
+        # Layout konfigurieren
+        layout = QtGui.QVBoxLayout(self)
+        layout.addWidget(self.search_field)
+        layout.addWidget(self.result_list)
+        self.setLayout(layout)
+
+        # Befehle laden und Anzeigenamen generieren
         self.commands = Gui.Command.listAll()
         self.display_names = self.generate_display_names(self.commands)
         self.filtered_commands = []
 
+        # Initiale Aktualisierung der Liste und Setzen des Fokus
         self.update_list()
         self.search_field.setFocus()
-        self.search_field.returnPressed.connect(self.run_selected_command)
+        self.search_field.returnPressed.connect(self.execute_selected_command)
 
-        # Suchleiste an Mausposition öffnen
+        # Positionieren der Suchleiste und Timer für Fokusprüfung
         self.move(QtGui.QCursor.pos())
+        self.focus_check_timer = QtCore.QTimer(self)
+        self.focus_check_timer.setInterval(100)
+        self.focus_check_timer.timeout.connect(self.check_focus_lost)
+        self.focus_check_timer.start()
 
     def generate_display_names(self, commands):
-        # Erstelle lesbare Anzeigenamen aus den Funktionsnamen
-        return [''.join(' ' + c if c.isupper() else c for c in cmd.replace('_', ' ').replace('PartDesign', '').replace('Draft', '')).strip() for cmd in commands]
+        """Generate readable display names from function names."""
+        return [
+            ''.join(' ' + char if char.isupper() else char
+                    for char in cmd.replace('_', ' ')
+                    .replace('PartDesign', '')
+                    .replace('Draft', '')).strip()
+            for cmd in commands
+        ]
 
     def update_list(self):
+        """Update the list of commands based on the search input."""
         search_text = self.search_field.text().lower()
         self.result_list.clear()
 
-        # Filtere die Anzeigenamen basierend auf der Eingabe und aktualisiere die gefilterten Listen
-        self.filtered_commands = [(disp, cmd) for disp, cmd in zip(self.display_names, self.commands) if search_text in disp.lower()]
-        self.result_list.addItems([disp for disp, _ in self.filtered_commands])
+        # Filter commands and update the result list
+        self.filtered_commands = [
+            (disp, cmd) for disp, cmd in zip(self.display_names, self.commands)
+            if search_text in disp.lower()
+        ]
+        self.result_list.addItems(disp for disp, _ in self.filtered_commands)
 
-        # Standardmäßig den ersten Eintrag auswählen, aber nur wenn die Liste neu gefiltert wird
+        # Set the first item as selected if there are items
         if self.result_list.count() > 0:
             self.result_list.setCurrentRow(0)
 
-    def run_command(self, item):
+    def execute_command(self, item):
+        """Execute the command associated with the clicked item."""
         selected_index = self.result_list.row(item)
         Gui.runCommand(self.filtered_commands[selected_index][1])
         self.close()
 
-    def run_selected_command(self):
+    def execute_selected_command(self):
+        """Execute the command associated with the currently selected item."""
         if self.result_list.count() > 0:
-            self.run_command(self.result_list.currentItem())
+            self.execute_command(self.result_list.currentItem())
 
     def keyPressEvent(self, event):
+        """Handle key press events for navigation and closing."""
         if event.key() == QtCore.Qt.Key_Escape:
             self.close()
         elif event.key() in {QtCore.Qt.Key_Down, QtCore.Qt.Key_Up}:
-            self.move_selection(1 if event.key() == QtCore.Qt.Key_Down else -1)
+            self.navigate_selection(1 if event.key() == QtCore.Qt.Key_Down else -1)
         else:
             super(CommandSearchBar, self).keyPressEvent(event)
 
-    def move_selection(self, direction):
+    def navigate_selection(self, direction):
+        """Navigate through the list items using arrow keys."""
         current_row = self.result_list.currentRow()
         new_row = current_row + direction
         if 0 <= new_row < self.result_list.count():
             self.result_list.setCurrentRow(new_row)
 
-    def focusOutEvent(self, event):
-        self.close()
+    def check_focus_lost(self):
+        """Check if the search bar has lost focus and close if necessary."""
+        if not self.isActiveWindow():
+            self.close()
 
 # Dialog starten
 dialog = CommandSearchBar()
