@@ -1,3 +1,24 @@
+"""
+Command Search Bar for FreeCAD
+
+Author: Thomas Gerster
+
+Description:
+This script creates a custom search bar in FreeCAD to quickly find and execute commands.
+The search bar is designed to appear at the current mouse position and allows filtering commands
+by their display names. Commands can be executed with a single click or by pressing Enter.
+
+Features:
+- Displays a list of commands based on the input.
+- Supports navigation with arrow keys.
+- Closes with Escape key or focus loss.
+- Executes selected command with a single click.
+
+Dependencies:
+- FreeCADGui
+- PySide (Qt library)
+"""
+
 import FreeCADGui as Gui
 from PySide import QtGui, QtCore
 
@@ -35,15 +56,18 @@ class CommandSearchBar(QtGui.QWidget):
         self.move(QtGui.QCursor.pos())
 
     def generate_display_names(self, commands):
+        # Erstelle lesbare Anzeigenamen aus den Funktionsnamen
         return [''.join(' ' + c if c.isupper() else c for c in cmd.replace('_', ' ').replace('PartDesign', '').replace('Draft', '')).strip() for cmd in commands]
 
     def update_list(self):
         search_text = self.search_field.text().lower()
         self.result_list.clear()
 
+        # Filtere die Anzeigenamen basierend auf der Eingabe und aktualisiere die gefilterten Listen
         self.filtered_commands = [(disp, cmd) for disp, cmd in zip(self.display_names, self.commands) if search_text in disp.lower()]
         self.result_list.addItems([disp for disp, _ in self.filtered_commands])
 
+        # Standardmäßig den ersten Eintrag auswählen, aber nur wenn die Liste neu gefiltert wird
         if self.result_list.count() > 0:
             self.result_list.setCurrentRow(0)
 
